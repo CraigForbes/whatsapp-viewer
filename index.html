@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Chat Viewer</title>
+<style>
+  :root{
+    --bg:#0b141a; --panel:#111b21; --panel2:#202c33; --bubble-in:#202c33;
+    --bubble-out:#005c4b; --text:#e9edef; --muted:#8696a0; --accent:#00a884;
+    --line:#2a3942; --link:#53bdeb; --chip:#2a3942; --danger:#f15c6d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  header{
+    background:var(--panel2); padding:10px 16px; display:flex; align-items:center; gap:12px;
+    border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  header h1{font-size:16px; margin:0; font-weight:600; display:flex; align-items:center; gap:8px}
+  header h1 .logo{color:var(--accent)}
+  .grow{flex:1}
+  .tabs{display:flex; gap:4px; background:var(--panel); border-radius:8px; padding:3px}
+  .tab{
+    border:0; background:transparent; color:var(--muted); padding:7px 14px; border-radius:6px;
+    cursor:pointer; font-size:13px; font-weight:600;
+  }
+  .tab.active{background:var(--accent); color:#04231d}
+  input,button,select{font-family:inherit}
+  .btn{
+    background:var(--accent); color:#04231d; border:0; padding:8px 14px; border-radius:6px;
+    cursor:pointer; font-weight:600; font-size:13px;
+  }
+  .btn.ghost{background:var(--panel); color:var(--text); border:1px solid var(--line)}
+  .btn.sm{padding:5px 9px; font-size:12px}
+  .search{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    padding:8px 12px; border-radius:8px; min-width:200px; font-size:13px;
+  }
+  main{flex:1; display:flex; overflow:hidden; position:relative}
+
+  /* ---------- Drop / empty state ---------- */
+  #drop{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:18px; text-align:center; padding:24px; z-index:20;
+    background:var(--bg);
+  }
+  #drop.hide{display:none}
+  #drop .box{
+    border:2px dashed var(--line); border-radius:16px; padding:48px 56px; max-width:560px;
+    transition:.15s; background:var(--panel);
+  }
+  #drop.dragover .box{border-color:var(--accent); background:#10241f}
+  #drop h2{margin:0 0 6px; font-weight:600}
+  #drop p{color:var(--muted); margin:6px 0; font-size:14px; line-height:1.5}
+  #drop .hint{font-size:12px; margin-top:14px}
+  .spinner{
+    width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin 1s linear infinite
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Chat view ---------- */
+  #chatView{flex:1; display:flex; flex-direction:column; overflow:hidden}
+  #chatScroll{flex:1; overflow-y:auto; padding:18px 8% 24px;
+    background:
+      linear-gradient(rgba(11,20,26,.94),rgba(11,20,26,.94));
+  }
+  .daysep{display:flex; justify-content:center; margin:16px 0}
+  .daysep span{background:var(--panel2); color:var(--muted); font-size:12px; padding:5px 12px;
+    border-radius:8px}
+  .msg{max-width:min(620px,80%); margin:3px 0; padding:7px 10px 6px; border-radius:10px;
+    background:var(--bubble-in); position:relative; clear:both; float:left; box-shadow:0 1px .5px rgba(0,0,0,.2)}
+  .msg.out{background:var(--bubble-out); float:right}
+  .msg .who{font-size:12.5px; font-weight:600; margin-bottom:2px}
+  .msg .body{font-size:14.2px; line-height:1.4; white-space:pre-wrap; word-break:break-word}
+  .msg .meta{font-size:10.5px; color:var(--muted); text-align:right; margin-top:2px; user-select:none}
+  .msg.system{float:none; margin:10px auto; background:var(--panel2); color:var(--muted);
+    text-align:center; font-size:12.5px; max-width:75%}
+  .msg a{color:var(--link)}
+  .msg.flash{animation:flash 1.6s ease}
+  @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 1px .5px rgba(0,0,0,.2)}}
+  .clearfix{clear:both}
+
+  /* media inside bubbles */
+  .media{margin:2px 0 4px; border-radius:8px; overflow:hidden; max-width:320px}
+  .media img,.media video{display:block; width:100%; cursor:pointer; background:#000}
+  .media audio{width:280px; display:block}
+  .filecard,.linkcard{
+    display:flex; align-items:center; gap:10px; background:rgba(0,0,0,.18); border-radius:8px;
+    padding:9px 11px; margin:2px 0 4px; text-decoration:none; color:inherit; max-width:340px;
+  }
+  .linkcard{cursor:pointer}
+  .filecard .ic,.linkcard .ic{font-size:22px; width:30px; text-align:center; flex:none}
+  .filecard .t,.linkcard .t{font-size:13px; overflow:hidden}
+  .filecard .t small,.linkcard .t small{color:var(--muted); display:block; font-size:11px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .linkthumb{width:100%; max-width:340px; border-radius:8px 8px 0 0; display:block; background:#000}
+  .tagbtn{
+    position:absolute; top:4px; right:5px; background:rgba(0,0,0,.45); border:0; color:#fff;
+    border-radius:6px; cursor:pointer; font-size:12px; padding:3px 6px; opacity:0; transition:.12s
+  }
+  .media:hover .tagbtn, .mediawrap:hover .tagbtn{opacity:1}
+  .mediawrap{position:relative}
+  .taglist{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px}
+  .tagpill{font-size:10.5px; background:var(--chip); color:var(--text); padding:2px 7px;
+    border-radius:10px}
+
+  /* ---------- Gallery view ---------- */
+  #galleryView{flex:1; display:flex; overflow:hidden}
+  #cats{width:230px; background:var(--panel); border-right:1px solid var(--line);
+    overflow-y:auto; padding:12px; flex:none}
+  #cats h3{font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);
+    margin:4px 4px 10px}
+  .catitem{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px;
+    cursor:pointer; font-size:13.5px; color:var(--text)}
+  .catitem:hover{background:var(--panel2)}
+  .catitem.active{background:var(--accent); color:#04231d; font-weight:600}
+  .catitem .cnt{margin-left:auto; font-size:11px; opacity:.8; background:rgba(0,0,0,.25);
+    padding:1px 7px; border-radius:9px}
+  .catitem.active .cnt{background:rgba(0,0,0,.18)}
+  .catitem .del{margin-left:6px; opacity:0; color:var(--danger); cursor:pointer; font-weight:700}
+  .catitem:hover .del{opacity:.8}
+  .addcat{display:flex; gap:6px; margin-top:12px}
+  .addcat input{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:7px 9px; font-size:13px; min-width:0}
+  #galleryMain{flex:1; overflow-y:auto; padding:16px}
+  #galleryHead{display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap}
+  #galleryHead h2{margin:0; font-size:18px}
+  .filterchips{display:flex; gap:6px; flex-wrap:wrap}
+  .fchip{background:var(--panel); border:1px solid var(--line); color:var(--muted); font-size:12px;
+    padding:5px 11px; border-radius:14px; cursor:pointer}
+  .fchip.active{background:var(--accent); color:#04231d; border-color:var(--accent); font-weight:600}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    display:flex; flex-direction:column}
+  .card .thumb{aspect-ratio:1/1; background:#000; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; cursor:pointer; position:relative}
+  .card .thumb img,.card .thumb video{width:100%;height:100%;object-fit:cover}
+  .card .thumb .ph{font-size:40px; color:var(--muted)}
+  .card .badge{position:absolute; bottom:6px; left:6px; background:rgba(0,0,0,.6); font-size:10px;
+    padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:.4px}
+  .card .info{padding:8px 9px; font-size:11.5px}
+  .card .info .nm{color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .card .info .by{color:var(--text); font-weight:600; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap}
+  .card .cardtags{display:flex; flex-wrap:wrap; gap:3px; margin-top:5px}
+  .card .actions{display:flex; gap:6px; padding:0 9px 9px}
+  .empty{color:var(--muted); text-align:center; padding:60px 20px; font-size:14px}
+
+  /* ---------- Lightbox ---------- */
+  #lb{position:fixed; inset:0; background:rgba(0,0,0,.92); display:none; z-index:50;
+    align-items:center; justify-content:center; flex-direction:column; padding:30px}
+  #lb.show{display:flex}
+  #lb img,#lb video{max-width:92vw; max-height:78vh; border-radius:6px}
+  #lbClose{position:absolute; top:16px; right:22px; font-size:30px; color:#fff; cursor:pointer;
+    background:0; border:0}
+  #lbInfo{color:#ddd; margin-top:14px; font-size:13px; text-align:center; max-width:80vw}
+  #lbInfo a{color:var(--link)}
+
+  /* ---------- Tag popover ---------- */
+  #pop{position:fixed; z-index:60; background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; padding:10px; width:220px; display:none; box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  #pop.show{display:block}
+  #pop h4{margin:0 0 8px; font-size:12px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px}
+  #pop label{display:flex; align-items:center; gap:8px; padding:5px 4px; font-size:13px;
+    border-radius:6px; cursor:pointer}
+  #pop label:hover{background:var(--panel)}
+  #pop .newrow{display:flex; gap:6px; margin-top:8px}
+  #pop .newrow input{flex:1; min-width:0; background:var(--panel); border:1px solid var(--line);
+    color:var(--text); border-radius:6px; padding:6px 8px; font-size:12px}
+  .scrim{position:fixed; inset:0; z-index:55; display:none}
+  .scrim.show{display:block}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#374248; border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="logo">●</span> WhatsApp Viewer</h1>
+  <div class="tabs" id="tabs" style="display:none">
+    <button class="tab active" data-view="chat">Chat</button>
+    <button class="tab" data-view="gallery">Media &amp; Links</button>
+  </div>
+  <div class="grow"></div>
+  <input class="search" id="search" placeholder="Search messages…" style="display:none">
+  <button class="btn ghost" id="newBtn" style="display:none">Load another</button>
+</header>
+
+<main>
+  <!-- Empty / drop state -->
+  <div id="drop">
+    <div class="box">
+      <div id="dropIdle">
+        <h2>Drop your WhatsApp export here</h2>
+        <p>Export a chat from WhatsApp <b>“With Media”</b>, then drop the <code>.zip</code> here
+           — or click to choose a file.</p>
+        <p class="hint">Everything stays in your browser. Nothing is uploaded.<br>
+           Works with both iPhone and Android exports.</p>
+        <div style="margin-top:18px"><button class="btn" id="pickBtn">Choose .zip file</button></div>
+        <input type="file" id="file" accept=".zip" hidden>
+      </div>
+      <div id="dropBusy" style="display:none">
+        <div class="spinner" style="margin:0 auto 16px"></div>
+        <p id="busyMsg">Reading zip…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div id="chatView" style="display:none">
+    <div id="chatScroll"></div>
+  </div>
+
+  <!-- Gallery -->
+  <div id="galleryView" style="display:none">
+    <aside id="cats">
+      <h3>Categories</h3>
+      <div id="catList"></div>
+      <div class="addcat">
+        <input id="newCat" placeholder="New category…">
+        <button class="btn sm" id="addCatBtn">Add</button>
+      </div>
+    </aside>
+    <section id="galleryMain">
+      <div id="galleryHead">
+        <h2 id="galleryTitle">All media</h2>
+        <div class="grow"></div>
+        <div class="filterchips" id="typeFilters">
+          <span class="fchip active" data-type="all">All</span>
+          <span class="fchip" data-type="image">Images</span>
+          <span class="fchip" data-type="video">Video</span>
+          <span class="fchip" data-type="audio">Audio</span>
+          <span class="fchip" data-type="link">Links</span>
+          <span class="fchip" data-type="file">Files</span>
+        </div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </section>
+  </div>
+</main>
+
+<!-- Lightbox -->
+<div id="lb">
+  <button id="lbClose">×</button>
+  <div id="lbBody"></div>
+  <div id="lbInfo"></div>
+</div>
+
+<!-- Tag popover -->
+<div class="scrim" id="scrim"></div>
+<div id="pop">
+  <h4>Categories</h4>
+  <div id="popList"></div>
+  <div class="newrow">
+    <input id="popNew" placeholder="New category…">
+    <button class="btn sm" id="popAdd">Add</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Native ZIP reader — zero dependencies.
+   Uses DecompressionStream('deflate-raw') for deflated entries.
+   ============================================================ */
+async function readZip(file){
+  const buf = await file.arrayBuffer();
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  const td = new TextDecoder('utf-8');
+
+  // locate End Of Central Directory
+  let eocd = -1;
+  const back = Math.min(buf.byteLength, 65557);
+  for(let i = buf.byteLength - 22; i >= buf.byteLength - back && i >= 0; i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error('Not a valid .zip file.');
+
+  let cdCount  = dv.getUint16(eocd + 10, true);
+  let cdOffset = dv.getUint32(eocd + 16, true);
+
+  // ZIP64 (large exports)
+  if(cdOffset === 0xFFFFFFFF || cdCount === 0xFFFF){
+    const loc = eocd - 20;
+    if(loc >= 0 && dv.getUint32(loc, true) === 0x07064b50){
+      const z64 = Number(dv.getBigUint64(loc + 8, true));
+      if(dv.getUint32(z64, true) === 0x06064b50){
+        cdCount  = Number(dv.getBigUint64(z64 + 32, true));
+        cdOffset = Number(dv.getBigUint64(z64 + 48, true));
+      }
+    }
+  }
+
+  const entries = {};
+  let p = cdOffset;
+  for(let n = 0; n < cdCount; n++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    const method   = dv.getUint16(p + 10, true);
+    let compSize   = dv.getUint32(p + 20, true);
+    let uncompSize = dv.getUint32(p + 24, true);
+    const fnLen    = dv.getUint16(p + 28, true);
+    const efLen    = dv.getUint16(p + 30, true);
+    const cmtLen   = dv.getUint16(p + 32, true);
+    let lho        = dv.getUint32(p + 42, true);
+    const name     = td.decode(u8.subarray(p + 46, p + 46 + fnLen));
+
+    if(compSize === 0xFFFFFFFF || uncompSize === 0xFFFFFFFF || lho === 0xFFFFFFFF){
+      let ep = p + 46 + fnLen; const eEnd = ep + efLen;
+      while(ep < eEnd){
+        const hid = dv.getUint16(ep, true), hsz = dv.getUint16(ep + 2, true);
+        if(hid === 0x0001){
+          let q = ep + 4;
+          if(uncompSize === 0xFFFFFFFF){ uncompSize = Number(dv.getBigUint64(q, true)); q += 8; }
+          if(compSize   === 0xFFFFFFFF){ compSize   = Number(dv.getBigUint64(q, true)); q += 8; }
+          if(lho        === 0xFFFFFFFF){ lho        = Number(dv.getBigUint64(q, true)); q += 8; }
+        }
+        ep += 4 + hsz;
+      }
+    }
+    entries[name] = { method, compSize, uncompSize, lho };
+    p += 46 + fnLen + efLen + cmtLen;
+  }
+  return { dv, u8, entries };
+}
+
+async function extractEntry(zip, entry){
+  const { dv, u8 } = zip;
+  const lho = entry.lho;
+  if(dv.getUint32(lho, true) !== 0x04034b50) throw new Error('Bad local header');
+  const fnLen = dv.getUint16(lho + 26, true);
+  const efLen = dv.getUint16(lho + 28, true);
+  const start = lho + 30 + fnLen + efLen;
+  const comp = u8.subarray(start, start + entry.compSize);
+  if(entry.method === 0) return comp.slice();
+  if(entry.method === 8){
+    const stream = new Blob([comp]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  throw new Error('Unsupported compression method ' + entry.method);
+}
+
+/* ============================================================
+   WhatsApp _chat.txt parsing
+   ============================================================ */
+const RLM = /[‎‏‪-‮⁦-⁩]/g; // bidi / invisible marks
+
+// iOS:     [2023/02/01, 14:30:55] Name: text
+// Android: 01/02/2023, 14:30 - Name: text   (optionally with AM/PM and seconds)
+const iosRe = /^\[(\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap]\.?[Mm]\.?)?\]\s/;
+const andRe = /^(\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap]\.?[Mm]\.?)?\s[-–]\s/;
+
+function isNewMessage(line){
+  return iosRe.test(line) || andRe.test(line);
+}
+
+function splitHeader(line){
+  // returns {ts, sender|null, text}
+  let ts, rest;
+  if(line[0] === '['){
+    const close = line.indexOf(']');
+    ts = line.slice(1, close).trim();
+    rest = line.slice(close + 1).replace(/^\s+/, '');
+  } else {
+    const dash = line.search(/\s[-–]\s/);
+    ts = line.slice(0, dash).trim();
+    rest = line.slice(dash + 3);
+  }
+  const colon = rest.indexOf(': ');
+  if(colon === -1) return { ts, sender:null, text:rest };          // system message
+  return { ts, sender: rest.slice(0, colon).trim(), text: rest.slice(colon + 2) };
+}
+
+function dayKey(ts){
+  // grab the leading date portion (before the first comma or space-time)
+  const m = ts.match(/^[^,]+/);
+  return m ? m[0].trim() : ts;
+}
+
+const attachRe = /<attached:\s*([^>]+)>/i;                 // iOS
+const fileAttRe = /([^\s][^\n]*?\.\w{2,5})\s*\((?:file attached|attached)\)/i; // Android
+const urlRe = /(https?:\/\/[^\s<>"')]+)/gi;
+
+function classify(name){
+  const e = (name.split('.').pop() || '').toLowerCase();
+  if(['jpg','jpeg','png','gif','webp','heic','heif','bmp'].includes(e)) return 'image';
+  if(['mp4','mov','3gp','mkv','webm','avi'].includes(e)) return 'video';
+  if(['opus','m4a','aac','mp3','ogg','wav','amr'].includes(e)) return 'audio';
+  return 'file';
+}
+const MIME = {jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',
+  heic:'image/heic',bmp:'image/bmp',mp4:'video/mp4',mov:'video/quicktime','3gp':'video/3gpp',
+  mkv:'video/x-matroska',webm:'video/webm',opus:'audio/ogg',m4a:'audio/mp4',aac:'audio/aac',
+  mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',amr:'audio/amr',pdf:'application/pdf'};
+function mimeOf(name){ return MIME[(name.split('.').pop()||'').toLowerCase()] || 'application/octet-stream'; }
+
+/* ============================================================
+   App state
+   ============================================================ */
+let ZIP = null;            // {dv,u8,entries}
+let BASEMAP = {};          // lowercased basename -> entry name in zip
+let MESSAGES = [];         // {ts, sender, text, isSystem, dayKey, media:[{key,name,type}], links:[{key,url}]}
+let ITEMS = [];            // gallery items {key,kind,name,url?,type,sender,ts,msgIndex}
+let OUT_SENDER = null;     // sender treated as "me" (right-aligned)
+let CHAT_ID = 'default';
+let CATS = [];             // category names
+let ASSIGN = {};           // itemKey -> [catNames]
+const urlCache = new Map();// filename -> objectURL
+
+function basename(n){ return n.split(/[\/\\]/).pop(); }
+
+/* ---- persistence (per chat) ---- */
+function loadStore(){
+  try{
+    CATS = JSON.parse(localStorage.getItem('wa_cats_' + CHAT_ID) || '[]');
+    ASSIGN = JSON.parse(localStorage.getItem('wa_assign_' + CHAT_ID) || '{}');
+  }catch(e){ CATS = []; ASSIGN = {}; }
+}
+function saveStore(){
+  localStorage.setItem('wa_cats_' + CHAT_ID, JSON.stringify(CATS));
+  localStorage.setItem('wa_assign_' + CHAT_ID, JSON.stringify(ASSIGN));
+}
+function addCategory(name){
+  name = name.trim();
+  if(!name || CATS.includes(name)) return name;
+  CATS.push(name); CATS.sort((a,b)=>a.localeCompare(b)); saveStore(); return name;
+}
+function tagsOf(key){ return ASSIGN[key] || []; }
+function toggleTag(key, cat){
+  const arr = ASSIGN[key] || (ASSIGN[key] = []);
+  const i = arr.indexOf(cat);
+  if(i === -1) arr.push(cat); else arr.splice(i,1);
+  if(!arr.length) delete ASSIGN[key];
+  saveStore();
+}
+
+/* ============================================================
+   Load + parse a zip file
+   ============================================================ */
+async function handleFile(file){
+  showBusy('Reading zip…');
+  try{
+    ZIP = await readZip(file);
+  }catch(err){
+    alert('Could not read this file: ' + err.message);
+    showIdle(); return;
+  }
+
+  // build basename map + find the chat txt
+  BASEMAP = {};
+  let chatEntry = null, chatName = '';
+  for(const name in ZIP.entries){
+    if(name.endsWith('/')) continue;
+    BASEMAP[basename(name).toLowerCase()] = name;
+    if(/\.txt$/i.test(name)){
+      // prefer _chat.txt, else first/largest txt
+      if(/_chat\.txt$/i.test(name) || !chatEntry) { chatEntry = ZIP.entries[name]; chatName = name; }
+    }
+  }
+  if(!chatEntry){ alert('No chat .txt found inside the zip.'); showIdle(); return; }
+
+  showBusy('Parsing chat…');
+  const txtBytes = await extractEntry(ZIP, chatEntry);
+  const text = new TextDecoder('utf-8').decode(txtBytes);
+  CHAT_ID = (chatName + ':' + file.size).replace(/[^\w]+/g,'_');
+  loadStore();
+
+  parseChat(text);
+  await new Promise(r=>setTimeout(r,10));
+
+  document.getElementById('tabs').style.display = '';
+  document.getElementById('search').style.display = '';
+  document.getElementById('newBtn').style.display = '';
+  document.getElementById('drop').classList.add('hide');
+  switchView('chat');
+  renderChat();
+  buildItems();
+  renderCats();
+}
+
+function parseChat(text){
+  MESSAGES = [];
+  const lines = text.split(/\r?\n/);
+  let cur = null;
+  const senders = {};
+
+  const push = ()=>{ if(cur) MESSAGES.push(cur); };
+
+  for(let raw of lines){
+    const line = raw.replace(RLM, '');
+    if(isNewMessage(line)){
+      push();
+      const h = splitHeader(line);
+      cur = { ts:h.ts, sender:h.sender, text:h.text, isSystem: h.sender === null,
+              dayKey: dayKey(h.ts), media:[], links:[] };
+      if(h.sender) senders[h.sender] = (senders[h.sender]||0)+1;
+    } else {
+      if(!cur){ // preamble line with no header
+        cur = { ts:'', sender:null, text:line, isSystem:true, dayKey:'', media:[], links:[] };
+      } else {
+        cur.text += '\n' + line;
+      }
+    }
+  }
+  push();
+
+  // pick "me": the most frequent sender (best guess; user can't easily know which device)
+  OUT_SENDER = Object.keys(senders).sort((a,b)=>senders[b]-senders[a])[0] || null;
+
+  // extract media + links per message
+  for(let mi=0; mi<MESSAGES.length; mi++){
+    const m = MESSAGES[mi];
+    let t = m.text;
+
+    // iOS <attached: file>
+    let mm;
+    while((mm = attachRe.exec(t))){
+      registerMedia(m, mm[1].trim());
+      t = t.replace(mm[0], '').trim();
+    }
+    // Android filename (file attached)
+    const fa = fileAttRe.exec(t);
+    if(fa){ registerMedia(m, fa[1].trim()); t = t.replace(fa[0], '').trim(); }
+
+    // bare filename line that exists in the zip (some exports)
+    if(!m.media.length){
+      const bare = t.trim();
+      if(/^[^\s]+\.\w{2,5}$/.test(bare) && BASEMAP[bare.toLowerCase()]){
+        registerMedia(m, bare); t = '';
+      }
+    }
+
+    m.displayText = t;
+
+    // links
+    const seen = new Set();
+    let um;
+    urlRe.lastIndex = 0;
+    while((um = urlRe.exec(m.text))){
+      let url = um[1].replace(/[.,)]+$/,'');
+      if(seen.has(url)) continue; seen.add(url);
+      m.links.push({ key:'l:'+url, url });
+    }
+  }
+}
+
+function registerMedia(m, fname){
+  const real = BASEMAP[basename(fname).toLowerCase()];
+  m.media.push({ key:'m:'+basename(fname).toLowerCase(), name: basename(fname),
+                 type: classify(fname), present: !!real, entryName: real || null });
+}
+
+/* lazy: filename -> object URL */
+async function mediaURL(item){
+  if(!item.entryName) return null;
+  if(urlCache.has(item.key)) return urlCache.get(item.key);
+  const bytes = await extractEntry(ZIP, ZIP.entries[item.entryName]);
+  const url = URL.createObjectURL(new Blob([bytes], { type: mimeOf(item.name) }));
+  urlCache.set(item.key, url);
+  return url;
+}
+
+/* ============================================================
+   Gallery items
+   ============================================================ */
+function buildItems(){
+  ITEMS = [];
+  const seenMedia = new Set();
+  for(let i=0;i<MESSAGES.length;i++){
+    const m = MESSAGES[i];
+    for(const md of m.media){
+      if(!md.present) continue;
+      if(seenMedia.has(md.key)) continue;     // dedupe identical files
+      seenMedia.add(md.key);
+      ITEMS.push({ key:md.key, kind:md.type, name:md.name, type:md.type,
+                   entryName:md.entryName, sender:m.sender, ts:m.ts, msgIndex:i });
+    }
+    for(const ln of m.links){
+      ITEMS.push({ key:ln.key, kind:'link', type:'link', url:ln.url, name:ln.url,
+                   sender:m.sender, ts:m.ts, msgIndex:i });
+    }
+  }
+}
+
+/* ============================================================
+   Rendering — Chat
+   ============================================================ */
+const esc = s => s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function linkify(s){
+  return esc(s).replace(urlRe, u=>{
+    const clean = u.replace(/[.,)]+$/,'');
+    return `<a href="${clean}" target="_blank" rel="noopener">${clean}</a>`;
+  });
+}
+
+const lazyObserver = new IntersectionObserver((ents)=>{
+  for(const e of ents){
+    if(e.isIntersecting){
+      const el = e.target; lazyObserver.unobserve(el);
+      const item = el._item;
+      mediaURL(item).then(url=>{ if(url){ el.src = url; } });
+    }
+  }
+}, { rootMargin:'400px' });
+
+function mediaEl(item){
+  const wrap = document.createElement('div');
+  wrap.className = 'media mediawrap';
+  let el;
+  if(!item.present){
+    wrap.className = 'filecard';
+    wrap.innerHTML = `<span class="ic">📎</span><div class="t"><b>${esc(item.name)}</b>
+      <small>not included in export</small></div>`;
+    return wrap;
+  }
+  if(item.type === 'image'){
+    el = document.createElement('img');
+    el.loading='lazy'; el._item=item; lazyObserver.observe(el);
+    el.onclick = ()=>openLightbox(item);
+  } else if(item.type === 'video'){
+    el = document.createElement('video');
+    el.controls = true; el.preload='none'; el._item=item; el.playsInline=true;
+    el.onclick = (e)=>{ if(!el.src){ mediaURL(item).then(u=>{el.src=u;}); } };
+    mediaURL(item).then(u=>{ el.src=u; });
+  } else if(item.type === 'audio'){
+    el = document.createElement('audio');
+    el.controls = true; el.preload='none';
+    mediaURL(item).then(u=>{ el.src=u; });
+  } else {
+    wrap.className = 'filecard';
+    const a = document.createElement('a'); a.className='ic'; a.textContent='📄';
+    wrap.appendChild(a);
+    const t = document.createElement('div'); t.className='t';
+    t.innerHTML = `<b>${esc(item.name)}</b><small>tap to open</small>`;
+    wrap.appendChild(t);
+    wrap.style.cursor='pointer';
+    wrap.onclick = ()=>mediaURL(item).then(u=>{ if(u) window.open(u,'_blank'); });
+    addTagBtn(wrap, item);
+    return wrap;
+  }
+  wrap.appendChild(el);
+  addTagBtn(wrap, item);
+  const tl = document.createElement('div'); tl.className='taglist'; tl.dataset.key=item.key;
+  wrap.appendChild(tl);
+  refreshTagList(tl, item.key);
+  return wrap;
+}
+
+function ytId(url){
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+function platformOf(url){
+  const h = (()=>{ try{ return new URL(url).hostname.replace(/^www\./,''); }catch(e){ return url; } })();
+  if(/youtu/.test(h)) return {ic:'▶️', label:'YouTube'};
+  if(/facebook|fb\.watch|fb\.com/.test(h)) return {ic:'📘', label:'Facebook'};
+  if(/instagram/.test(h)) return {ic:'📷', label:'Instagram'};
+  if(/tiktok/.test(h)) return {ic:'🎵', label:'TikTok'};
+  if(/twitter|x\.com/.test(h)) return {ic:'🐦', label:'X / Twitter'};
+  if(/spotify/.test(h)) return {ic:'🎧', label:'Spotify'};
+  return {ic:'🔗', label:h};
+}
+function linkEl(ln){
+  const url = ln.url;
+  const wrap = document.createElement('div'); wrap.className='mediawrap';
+  const yt = ytId(url);
+  const a = document.createElement('a');
+  a.className='linkcard'; a.href=url; a.target='_blank'; a.rel='noopener';
+  const pf = platformOf(url);
+  if(yt){
+    a.style.flexDirection='column'; a.style.alignItems='stretch'; a.style.padding='0';
+    const img = document.createElement('img'); img.className='linkthumb';
+    img.src = `https://img.youtube.com/vi/${yt}/hqdefault.jpg`;
+    img.onerror = ()=>{ img.style.display='none'; };
+    a.appendChild(img);
+    const r = document.createElement('div'); r.style.cssText='display:flex;gap:10px;padding:9px 11px;align-items:center';
+    r.innerHTML = `<span class="ic">${pf.ic}</span><div class="t"><b>${pf.label}</b>
+      <small>${esc(url)}</small></div>`;
+    a.appendChild(r);
+  } else {
+    a.innerHTML = `<span class="ic">${pf.ic}</span><div class="t"><b>${pf.label}</b>
+      <small>${esc(url)}</small></div>`;
+  }
+  wrap.appendChild(a);
+  addTagBtn(wrap, ln, true);
+  const tl = document.createElement('div'); tl.className='taglist'; tl.dataset.key=ln.key;
+  wrap.appendChild(tl); refreshTagList(tl, ln.key);
+  return wrap;
+}
+
+function addTagBtn(wrap, item, isLink){
+  const b = document.createElement('button');
+  b.className='tagbtn'; b.textContent='🏷 Tag';
+  b.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); openPop(e, item.key); };
+  wrap.appendChild(b);
+}
+
+function refreshTagList(el, key){
+  const tags = tagsOf(key);
+  el.innerHTML = tags.map(t=>`<span class="tagpill">${esc(t)}</span>`).join('');
+}
+
+function renderChat(filter){
+  const scroll = document.getElementById('chatScroll');
+  scroll.innerHTML='';
+  const f = (filter||'').toLowerCase();
+  let lastDay = null;
+  const frag = document.createDocumentFragment();
+
+  for(let i=0;i<MESSAGES.length;i++){
+    const m = MESSAGES[i];
+    if(f){
+      const hay = (m.sender||'') + ' ' + m.text;
+      if(!hay.toLowerCase().includes(f)) continue;
+    }
+    if(m.dayKey && m.dayKey !== lastDay){
+      lastDay = m.dayKey;
+      const d = document.createElement('div'); d.className='daysep';
+      d.innerHTML = `<span>${esc(m.dayKey)}</span>`; frag.appendChild(d);
+    }
+    const div = document.createElement('div');
+    div.dataset.idx = i;
+    if(m.isSystem){ div.className='msg system'; div.textContent = m.text; frag.appendChild(div);
+      const c=document.createElement('div'); c.className='clearfix'; frag.appendChild(c); continue; }
+    div.className = 'msg' + (m.sender === OUT_SENDER ? ' out' : '');
+    if(m.sender && m.sender !== OUT_SENDER){
+      const w=document.createElement('div'); w.className='who';
+      w.style.color = colorFor(m.sender); w.textContent=m.sender; div.appendChild(w);
+    }
+    for(const md of m.media) div.appendChild(mediaEl(md));
+    for(const ln of m.links) div.appendChild(linkEl(ln));
+    const txt = (m.displayText!==undefined?m.displayText:m.text).trim();
+    if(txt){
+      const b=document.createElement('div'); b.className='body'; b.innerHTML=linkify(txt);
+      div.appendChild(b);
+    }
+    const meta=document.createElement('div'); meta.className='meta'; meta.textContent=timeOf(m.ts);
+    div.appendChild(meta);
+    frag.appendChild(div);
+    const c=document.createElement('div'); c.className='clearfix'; frag.appendChild(c);
+  }
+  scroll.appendChild(frag);
+  if(!f) scroll.scrollTop = scroll.scrollHeight;
+}
+
+function timeOf(ts){
+  const m = ts.match(/(\d{1,2}:\d{2}(?::\d{2})?\s*[APap]?\.?[Mm]?\.?)/);
+  return m ? m[1] : ts;
+}
+const COLORS=['#53bdeb','#ffab91','#a5d6a7','#ce93d8','#ffd54f','#80cbc4','#f48fb1','#90caf9','#c5e1a5','#ffcc80'];
+const colorMap={}; let colorI=0;
+function colorFor(s){ if(!(s in colorMap)) colorMap[s]=COLORS[colorI++ % COLORS.length]; return colorMap[s]; }
+
+/* ============================================================
+   Rendering — Gallery
+   ============================================================ */
+let activeCat = '__all__';   // '__all__' | '__untag__' | category name
+let activeType = 'all';
+
+function renderCats(){
+  const list = document.getElementById('catList');
+  const counts = {}; let untagged=0;
+  for(const it of ITEMS){
+    const tags = tagsOf(it.key);
+    if(!tags.length) untagged++;
+    for(const t of tags) counts[t]=(counts[t]||0)+1;
+  }
+  let html = '';
+  html += catRow('__all__','📁 All media', ITEMS.length);
+  html += catRow('__untag__','🏷 Uncategorised', untagged);
+  for(const c of CATS) html += catRow(c, esc(c), counts[c]||0, true);
+  list.innerHTML = html;
+
+  list.querySelectorAll('.catitem').forEach(el=>{
+    el.onclick=(e)=>{
+      if(e.target.classList.contains('del')) return;
+      activeCat = el.dataset.cat; renderGallery(); renderCats();
+    };
+  });
+  list.querySelectorAll('.del').forEach(el=>{
+    el.onclick=(e)=>{ e.stopPropagation(); deleteCategory(el.dataset.cat); };
+  });
+}
+function catRow(cat,label,count,del){
+  return `<div class="catitem ${activeCat===cat?'active':''}" data-cat="${esc(cat)}">
+    <span>${label}</span><span class="cnt">${count}</span>
+    ${del?`<span class="del" data-cat="${esc(cat)}" title="Delete category">×</span>`:''}</div>`;
+}
+function deleteCategory(cat){
+  if(!confirm(`Delete category “${cat}”? Tags using it will be removed.`)) return;
+  CATS = CATS.filter(c=>c!==cat);
+  for(const k in ASSIGN){ ASSIGN[k]=ASSIGN[k].filter(c=>c!==cat); if(!ASSIGN[k].length) delete ASSIGN[k]; }
+  if(activeCat===cat) activeCat='__all__';
+  saveStore(); renderCats(); renderGallery(); refreshAllTagLists();
+}
+
+function renderGallery(){
+  const grid = document.getElementById('grid');
+  const title = document.getElementById('galleryTitle');
+  title.textContent = activeCat==='__all__' ? 'All media'
+    : activeCat==='__untag__' ? 'Uncategorised' : activeCat;
+
+  let items = ITEMS.filter(it=>{
+    if(activeType!=='all' && it.type!==activeType) return false;
+    if(activeCat==='__all__') return true;
+    const tags = tagsOf(it.key);
+    if(activeCat==='__untag__') return tags.length===0;
+    return tags.includes(activeCat);
+  });
+
+  grid.innerHTML='';
+  if(!items.length){ grid.innerHTML='<div class="empty">Nothing here yet.</div>'; return; }
+  const frag=document.createDocumentFragment();
+  for(const it of items) frag.appendChild(galleryCard(it));
+  grid.appendChild(frag);
+}
+
+function galleryCard(it){
+  const card=document.createElement('div'); card.className='card';
+  const thumb=document.createElement('div'); thumb.className='thumb';
+  const badge=document.createElement('span'); badge.className='badge'; badge.textContent=it.type;
+
+  if(it.kind==='image'){
+    const img=document.createElement('img'); img._item=it; lazyObserver.observe(img);
+    thumb.appendChild(img); thumb.onclick=()=>openLightbox(it);
+  } else if(it.kind==='video'){
+    const ph=document.createElement('div'); ph.className='ph'; ph.textContent='🎬';
+    thumb.appendChild(ph); thumb.onclick=()=>openLightbox(it);
+  } else if(it.kind==='audio'){
+    const ph=document.createElement('div'); ph.className='ph'; ph.textContent='🎵';
+    thumb.appendChild(ph); thumb.onclick=()=>openLightbox(it);
+  } else if(it.kind==='link'){
+    const yt=ytId(it.url);
+    if(yt){ const img=document.createElement('img'); img.src=`https://img.youtube.com/vi/${yt}/hqdefault.jpg`;
+      img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'🔗'}));};
+      thumb.appendChild(img); }
+    else { const ph=document.createElement('div'); ph.className='ph'; ph.textContent=platformOf(it.url).ic; thumb.appendChild(ph); }
+    thumb.onclick=()=>window.open(it.url,'_blank');
+  } else {
+    const ph=document.createElement('div'); ph.className='ph'; ph.textContent='📄'; thumb.appendChild(ph);
+    thumb.onclick=()=>mediaURL(it).then(u=>u&&window.open(u,'_blank'));
+  }
+  thumb.appendChild(badge);
+  card.appendChild(thumb);
+
+  const info=document.createElement('div'); info.className='info';
+  info.innerHTML=`<div class="by">${esc(it.sender||'—')}</div>
+    <div class="nm">${it.kind==='link'?esc(platformOf(it.url).label):esc(it.name)}</div>`;
+  const ct=document.createElement('div'); ct.className='cardtags taglist'; ct.dataset.key=it.key;
+  refreshTagList(ct,it.key); info.appendChild(ct);
+  card.appendChild(info);
+
+  const act=document.createElement('div'); act.className='actions';
+  const tagB=document.createElement('button'); tagB.className='btn ghost sm'; tagB.textContent='🏷 Tag';
+  tagB.style.flex='1'; tagB.onclick=(e)=>openPop(e,it.key);
+  const goB=document.createElement('button'); goB.className='btn ghost sm'; goB.textContent='💬';
+  goB.title='Show in chat'; goB.onclick=()=>jumpToMessage(it.msgIndex);
+  act.appendChild(tagB); act.appendChild(goB);
+  card.appendChild(act);
+  return card;
+}
+
+function jumpToMessage(idx){
+  switchView('chat');
+  document.getElementById('search').value=''; renderChat();
+  requestAnimationFrame(()=>{
+    const el=document.querySelector(`.msg[data-idx="${idx}"]`);
+    if(el){ el.scrollIntoView({block:'center'}); el.classList.add('flash');
+      setTimeout(()=>el.classList.remove('flash'),1600); }
+  });
+}
+
+/* ============================================================
+   Lightbox
+   ============================================================ */
+function openLightbox(item){
+  const lb=document.getElementById('lb'); const body=document.getElementById('lbBody');
+  const info=document.getElementById('lbInfo');
+  body.innerHTML=''; info.innerHTML='';
+  mediaURL(item).then(url=>{
+    if(!url){ info.textContent='Media not available.'; return; }
+    let el;
+    if(item.type==='image'){ el=document.createElement('img'); el.src=url; }
+    else if(item.type==='video'){ el=document.createElement('video'); el.src=url; el.controls=true; el.autoplay=true; }
+    else if(item.type==='audio'){ el=document.createElement('audio'); el.src=url; el.controls=true; el.autoplay=true; }
+    else { window.open(url,'_blank'); return; }
+    body.appendChild(el);
+  });
+  info.innerHTML=`<b>${esc(item.sender||'')}</b> · ${esc(item.ts||'')} · ${esc(item.name)}`;
+  lb.classList.add('show');
+}
+document.getElementById('lbClose').onclick=()=>closeLightbox();
+document.getElementById('lb').onclick=(e)=>{ if(e.target.id==='lb') closeLightbox(); };
+function closeLightbox(){ const lb=document.getElementById('lb');
+  lb.classList.remove('show'); document.getElementById('lbBody').innerHTML=''; }
+
+/* ============================================================
+   Tag popover
+   ============================================================ */
+let popKey=null;
+function openPop(e, key){
+  e.preventDefault(); e.stopPropagation();
+  popKey=key;
+  const pop=document.getElementById('pop'); const scrim=document.getElementById('scrim');
+  renderPop();
+  scrim.classList.add('show'); pop.classList.add('show');
+  // position near cursor, kept in viewport
+  const x=Math.min(e.clientX, window.innerWidth-240);
+  const y=Math.min(e.clientY, window.innerHeight-260);
+  pop.style.left=Math.max(8,x)+'px'; pop.style.top=Math.max(8,y)+'px';
+  document.getElementById('popNew').value='';
+}
+function renderPop(){
+  const list=document.getElementById('popList');
+  const tags=tagsOf(popKey);
+  if(!CATS.length){ list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:4px">No categories yet — add one below.</div>'; return; }
+  list.innerHTML = CATS.map(c=>`<label><input type="checkbox" data-cat="${esc(c)}" ${tags.includes(c)?'checked':''}> ${esc(c)}</label>`).join('');
+  list.querySelectorAll('input').forEach(inp=>{
+    inp.onchange=()=>{ toggleTag(popKey, inp.dataset.cat); refreshAllTagLists(); renderCats();
+      if(viewIs('gallery')) renderGallery(); };
+  });
+}
+document.getElementById('popAdd').onclick=popAdd;
+document.getElementById('popNew').addEventListener('keydown',e=>{ if(e.key==='Enter') popAdd(); });
+function popAdd(){
+  const inp=document.getElementById('popNew'); const name=addCategory(inp.value);
+  inp.value=''; if(name){ toggleTag(popKey,name); } renderPop(); refreshAllTagLists(); renderCats();
+  if(viewIs('gallery')) renderGallery();
+}
+function closePop(){ document.getElementById('pop').classList.remove('show');
+  document.getElementById('scrim').classList.remove('show'); popKey=null; }
+document.getElementById('scrim').onclick=closePop;
+
+function refreshAllTagLists(){
+  document.querySelectorAll('.taglist').forEach(el=>refreshTagList(el, el.dataset.key));
+}
+
+/* ============================================================
+   Views, search, wiring
+   ============================================================ */
+function viewIs(v){ return document.querySelector('.tab.active')?.dataset.view===v; }
+function switchView(v){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
+  document.getElementById('chatView').style.display = v==='chat'?'flex':'none';
+  document.getElementById('galleryView').style.display = v==='gallery'?'flex':'none';
+  document.getElementById('search').style.display = v==='chat'?'':'none';
+  if(v==='gallery'){ renderCats(); renderGallery(); }
+}
+document.getElementById('tabs').onclick=(e)=>{ const t=e.target.closest('.tab'); if(t) switchView(t.dataset.view); };
+
+document.getElementById('search').addEventListener('input', e=>{
+  renderChat(e.target.value);
+});
+
+document.getElementById('typeFilters').onclick=(e)=>{
+  const c=e.target.closest('.fchip'); if(!c) return;
+  activeType=c.dataset.type;
+  document.querySelectorAll('.fchip').forEach(x=>x.classList.toggle('active',x===c));
+  renderGallery();
+};
+
+document.getElementById('addCatBtn').onclick=()=>{
+  const inp=document.getElementById('newCat'); addCategory(inp.value); inp.value=''; renderCats();
+};
+document.getElementById('newCat').addEventListener('keydown',e=>{ if(e.key==='Enter'){
+  addCategory(e.target.value); e.target.value=''; renderCats(); } });
+
+/* file input + drag/drop */
+const drop=document.getElementById('drop'), fileInput=document.getElementById('file');
+document.getElementById('pickBtn').onclick=()=>fileInput.click();
+document.getElementById('newBtn').onclick=()=>{ location.reload(); };
+fileInput.onchange=()=>{ if(fileInput.files[0]) handleFile(fileInput.files[0]); };
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('dragover');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('dragover');}));
+drop.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files].find(x=>/\.zip$/i.test(x.name))||e.dataTransfer.files[0];
+  if(f) handleFile(f); });
+// also allow dropping anywhere once loaded
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{ if(drop.classList.contains('hide')){ e.preventDefault();
+  const f=[...e.dataTransfer.files].find(x=>/\.zip$/i.test(x.name)); if(f){ if(confirm('Load this chat instead?')) location.reload(); } } });
+
+function showBusy(msg){ document.getElementById('dropIdle').style.display='none';
+  document.getElementById('dropBusy').style.display=''; document.getElementById('busyMsg').textContent=msg;
+  drop.classList.remove('hide'); }
+function showIdle(){ document.getElementById('dropIdle').style.display='';
+  document.getElementById('dropBusy').style.display='none'; }
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePop(); } });
+
+/* feature check */
+if(typeof DecompressionStream==='undefined'){
+  alert('Your browser is too old (no DecompressionStream). Please use a recent Chrome, Edge, Firefox, or Safari.');
+}
+</script>
+</body>
+</html>
